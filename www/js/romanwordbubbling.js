@@ -185,6 +185,7 @@ function renderImage() {
     100;
   let padding = gapWidth + outlineThickness;
   let removeText = document.getElementById("removeText").checked;
+  let animateText = document.getElementById("animateText").checked;
   let darkMode = document.getElementById("darkMode").checked;
   let text = document.getElementById("textInput").value;
   var tCtx = document.getElementById("textCanvas").getContext("2d"); //Hidden canvas
