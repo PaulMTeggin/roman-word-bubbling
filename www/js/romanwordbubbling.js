@@ -186,6 +186,8 @@ function renderImage() {
   let padding = gapWidth + outlineThickness;
   let removeText = document.getElementById("removeText").checked;
   let animateText = document.getElementById("animateText").checked;
+  if (animateText) removeText = true; // Want to remove text in bubbleWord because we preseve the text image directly
+
   let darkMode = document.getElementById("darkMode").checked;
   let text = document.getElementById("textInput").value;
   var tCtx = document.getElementById("textCanvas").getContext("2d"); //Hidden canvas
@@ -255,10 +257,25 @@ function renderImage() {
       tCtx.fillStyle = "black";
       tCtx.fillText(word, padding, fontSize + padding);
     
-      let img = cv.imread("textCanvas");
-      let borderImage = bubbleWord(img, color, removeText, darkMode, gapWidth, outlineThickness, blurRadius);
+      var textImageRGBA = cv.imread("textCanvas");
+      var textImage = cv.Mat.zeros(textImageRGBA.rows, textImageRGBA.cols, cv.CV_8UC3);
+      cv.cvtColor(textImageRGBA, textImage, cv.COLOR_RGBA2RGB, 0);
+      let borderImage = bubbleWord(textImage, color, removeText, animateText, darkMode, gapWidth, outlineThickness, blurRadius);
 
-      images[lineCount][wordCount] = [borderImage, new cv.Rect(x, lineHeight*lineCount, tCtx.canvas.width, tCtx.canvas.height)];
+      if (animateText) {
+        let mask = cv.Mat.zeros(textImage.rows, textImage.cols, cv.CV_8UC1);
+        cv.cvtColor(textImage, mask, cv.COLOR_RGBA2GRAY, 0);
+        cv.threshold(mask, mask, 254, 255, cv.THRESH_BINARY); // Only want to mask what is currently pure black
+        if (darkMode) {         
+          cv.bitwise_not(textImage, textImage); // Invert the colours in the text - mask has identified the correct pixels regardless of dark mode
+        }
+        cv.bitwise_not(mask, mask); // Invert the mask so we can write through it
+        // Store the text image and mask for later animation
+        images[lineCount][wordCount] = [borderImage, new cv.Rect(x, lineHeight*lineCount, tCtx.canvas.width, tCtx.canvas.height), textImage, mask];
+      } else {
+        // Not animating, so just store the border (bubble) and the rectangle
+        images[lineCount][wordCount] = [borderImage, new cv.Rect(x, lineHeight*lineCount, tCtx.canvas.width, tCtx.canvas.height)];
+      }
 
       x = x + wordWidth;
       wordCount++;
@@ -274,6 +291,7 @@ function renderImage() {
   tCtx.canvas.width = maxLineWidth + padding;
   // Clear
   let finalImage = cv.Mat.zeros(tCtx.canvas.height, tCtx.canvas.width, cv.CV_8UC3);
+  
   if (!darkMode) {
     cv.bitwise_not(finalImage, finalImage);
   }
@@ -282,8 +300,6 @@ function renderImage() {
     for (var j = 0; j < images[i].length; j++) {
       var image = images[i][j][0];
       cv.imshow("textCanvas", image);
-      outputImage = document.getElementById("output");
-      outputImage.src = document.getElementById("textCanvas").toDataURL();
       var rect = images[i][j][1];
       let dest = finalImage.roi(rect);
       if(darkMode) {
@@ -291,33 +307,152 @@ function renderImage() {
       } else {
         cv.bitwise_and(dest, image, dest);
       }
+
       image.delete();
     }
   }
   debugOutline(finalImage, new cv.Scalar(255, 0, 0));
 
-  cv.imshow("textCanvas", finalImage);
   outputImage = document.getElementById("output");
-  outputImage.src = document.getElementById("textCanvas").toDataURL();
+  if (animateText) {
+    animateWords(finalImage, images, darkMode);
+    // gif_data_url = animateWords(finalImage, images, darkMode);
+    // outputImage.src = gif_data_url;
+  } else {
+    cv.imshow("textCanvas", finalImage);
+    outputImage.src = document.getElementById("textCanvas").toDataURL();  
+  }
+
   finalImage.delete();
 }
 
-function bubbleWord(img, color, removeText, darkMode, gapWidth, outlineThickness, blurRadius) {
-  let shape = cv.Mat.zeros(img.cols, img.rows, cv.CV_8UC1);
-  cv.cvtColor(img, shape, cv.COLOR_RGBA2GRAY, 0);
+function animateWords(finalImage, images, darkMode) {
+  // Extra height is half the maximum height across all words in the first row
+  let extraRows = 0;
+  if (images.length > 0) {
+    for (var j = 0; j < images[0].length; j++) {    
+      extraRows = Math.max(extraRows, images[0][j][1].height);
+    }  
+  }
+  extraRows = 1 + Math.floor(extraRows / 2);
+
+  // Width of longest word to allow room for words to bounce in from the left
+  let extraCols = 0;
+  for (var i = 0; i < images.length; i++) {    
+    for (var j = 0; j < images[i].length; j++) {    
+      extraCols = Math.max(extraCols, images[i][j][1].width);
+    }  
+  }
+  
+  let workingImage = cv.Mat.zeros(finalImage.rows + extraRows, finalImage.cols + extraCols, cv.CV_8UC3);
+  if (!darkMode) {
+    cv.bitwise_not(workingImage, workingImage);
+  }
+
+  // Copy final image into destination rectangle
+  let fiRect = new cv.Rect(extraCols, extraRows, finalImage.cols, finalImage.rows)
+  let fiDest = workingImage.roi(fiRect);
+  if(darkMode) {
+    cv.bitwise_or(fiDest, finalImage, fiDest);
+  } else {
+    cv.bitwise_and(fiDest, finalImage, fiDest);
+  }
+
+  // finalImage is now the 'clean' version that is updated when a word animation finishes
+  // workingImage is the version that's amended in each animation frame
+  // but at this point, workImage is the correct size
+  finalImage = cv.Mat.zeros(workingImage.rows, workingImage.cols, cv.CV_8UC3);
+  workingImage.copyTo(finalImage);
+
+  var encoder = new Animated_GIF({
+    useQuantizer: false
+  }); 
+
+  encoder.setSize(finalImage.cols, finalImage.rows);
+  encoder.setRepeat(0); // loop forever
+  encoder.setDelay(1 / 50); // 50 fps
+
+  
+  for (var i = 0; i < images.length; i++) {
+    for (var j = 0; j < images[i].length; j++) {    
+      let textRect = images[i][j][1];
+      let textImage = images[i][j][2];
+      let mask = images[i][j][3];
+
+      animateSingleWord(encoder, finalImage, workingImage, textRect, extraRows, extraCols, textImage, mask, darkMode);
+      workingImage.copyTo(finalImage); // Preserve the final location of each word as it finishes animating
+    }
+  } 
+  
+  // Wait for two seconds at the end
+  encoder.setDelay(2);
+  var tCtx = document.getElementById("textCanvas").getContext("2d")
+  encoder.addFrameImageData(tCtx.getImageData(0, 0, finalImage.cols, finalImage.rows));
+
+  encoder.getBase64GIF(function(gif_b64) {
+    outputImage = document.getElementById("output");
+    outputImage.src = gif_b64;
+    encoder.destroy();
+  });
+
+  workingImage.delete();
+}
+
+function animateSingleWord(encoder, finalImage, workingImage, textRect, extraRows, extraCols, textImage, mask, darkMode) {
+  encoder.setDelay(1 / 50); // TODO scale to number of pixels somehow so larger images take the same amount of time
+
+  let currentRect = new cv.Rect(0, 0, textRect.width, textRect.height)
+  let frames = 50;
+  let x_frac = 0;
+  let y_frac = 0;
+  for (var frame = 0; frame <= frames; frame++) {
+    finalImage.copyTo(workingImage); // Restore clean version - TODO use dirty rectangle approach to restore the part overwritten each frame
+
+    var t = frame / frames;
+    x_frac = Math.min(1.0, t / 0.8);
+    if (t < 0.4) {
+      y_frac = 1 - t / 0.4;
+    } else if (t < 0.8) {
+      y_frac = (t - 0.4) / 0.4
+    } else if (t < 0.9) {
+      y_frac = (0.5 - (t - 0.8)) / 0.5;
+    } else {
+      y_frac = (t - 0.5) / 0.5;
+    }
+    
+    y_frac = Math.min(y_frac, 1.0) // In case of floating-point issues
+
+    currentRect.x = extraCols - textRect.width + (x_frac * (textRect.x + textRect.width));
+    currentRect.y = textRect.y + (y_frac * extraRows);
+    
+    let offsetDest = workingImage.roi(currentRect);
+    if (darkMode) {
+      cv.bitwise_or(offsetDest, textImage, offsetDest, mask);
+    } else {
+      cv.bitwise_and(offsetDest, textImage, offsetDest, mask);
+    }       
+
+    cv.imshow("textCanvas", workingImage);
+    var tCtx = document.getElementById("textCanvas").getContext("2d")
+    encoder.addFrameImageData(tCtx.getImageData(0, 0, finalImage.cols, finalImage.rows));
+  }
+
+  encoder.setDelay(0.5);
+  encoder.addFrameImageData(tCtx.getImageData(0, 0, finalImage.cols, finalImage.rows));
+}
+
+function bubbleWord(textImage, color, removeText, animateText, darkMode, gapWidth, outlineThickness, blurRadius) {
+  let shape = cv.Mat.zeros(textImage.rows, textImage.cols, cv.CV_8UC1);
+  cv.cvtColor(textImage, shape, cv.COLOR_RGBA2GRAY, 0);
   cv.bitwise_not(shape, shape);
 
   // Make white image for border
-  let borderImage = cv.Mat.zeros(img.rows, img.cols, cv.CV_8UC3);
+  let borderImage = cv.Mat.zeros(textImage.rows, textImage.cols, cv.CV_8UC3);
   cv.bitwise_not(borderImage, borderImage);
-
-  // Make non-transparent image for text
-  let textImage = cv.Mat.zeros(img.rows, img.cols, cv.CV_8UC3);
-  cv.cvtColor(img, textImage, cv.COLOR_RGBA2RGB, 0);
 
   let contours = new cv.MatVector();
   let hierarchy = new cv.Mat();
-  let contourImage = cv.Mat.zeros(img.rows, img.cols, cv.CV_8UC3);
+  let contourImage = cv.Mat.zeros(textImage.rows, textImage.cols, cv.CV_8UC3);
 
   // Find and draw contours
   // RETR_EXTERNAL means it will fill in holes in letters like 'o' and 'a'
@@ -341,7 +476,7 @@ function bubbleWord(img, color, removeText, darkMode, gapWidth, outlineThickness
   cv.cvtColor(contourImage, shape, cv.COLOR_BGR2GRAY);
   cv.threshold(shape, shape, 0, 255, cv.THRESH_BINARY);
 
-  // Find the outside edge of the countour we just drew
+  // Find the outside edge of the contour we just drew
   // This will be the center of the outline
   cv.findContours(
     shape,
@@ -368,16 +503,20 @@ function bubbleWord(img, color, removeText, darkMode, gapWidth, outlineThickness
     // Combine the text and the border
     cv.bitwise_and(borderImage, textImage, borderImage);
   }
+
   if (darkMode) {
     cv.bitwise_not(borderImage, borderImage);
   }
+  
+  if (!animateText) {
+    // Only delete the input text image if we are not animating
+    textImage.delete();
+  }
 
-  img.delete();
   shape.delete();
   contours.delete();
   hierarchy.delete();
   contourImage.delete();
-  textImage.delete();
 
   debugOutline(borderImage, new cv.Scalar(0, 0, 255));
 
