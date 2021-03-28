@@ -169,6 +169,16 @@ function loadCustomFont() {
     reader.readAsArrayBuffer(file);
   }
 }
+
+function startAnimateText() {
+  let animateState = document.getElementById("animateText").value;
+  if (animateState === "0") {
+    document.getElementById("animateText").value = "1";
+    document.getElementById("animating").style.visibility = "visible";
+    renderImage();
+  }
+}
+
 function renderImage() {
   let fontSize = parseInt(
     document.getElementById("fontSize").dataset.value,
@@ -185,7 +195,7 @@ function renderImage() {
     100;
   let padding = gapWidth + outlineThickness;
   let removeText = document.getElementById("removeText").checked;
-  let animateText = document.getElementById("animateText").checked;
+  let animateText = document.getElementById("animateText").value === "1";
   if (animateText) removeText = true; // Want to remove text in bubbleWord because we preseve the text image directly
 
   let darkMode = document.getElementById("darkMode").checked;
@@ -390,6 +400,9 @@ function animateWords(finalImage, images, darkMode) {
   encoder.addFrameImageData(tCtx.getImageData(0, 0, finalImage.cols, finalImage.rows));
 
   encoder.getBase64GIF(function(gif_b64) {
+    document.getElementById("animateText").value = "0";
+    document.getElementById("animating").style.visibility = "hidden";
+
     outputImage = document.getElementById("output");
     outputImage.src = gif_b64;
     encoder.destroy();
@@ -564,6 +577,7 @@ function submitFeedback() {
 function finalize() {
   document.getElementsByClassName("loader")[0].remove();
   document.getElementById("loadingBackground").remove();
+  document.getElementById("animating").style.visibility = "hidden";
   renderImage();
 }
 
