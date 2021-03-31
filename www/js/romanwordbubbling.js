@@ -382,7 +382,6 @@ function animateWords(finalImage, images, darkMode) {
   encoder.setRepeat(0); // loop forever
   encoder.setDelay(1 / 50); // 50 fps
 
-  
   for (var i = 0; i < images.length; i++) {
     for (var j = 0; j < images[i].length; j++) {    
       let textRect = images[i][j][1];
@@ -399,15 +398,35 @@ function animateWords(finalImage, images, darkMode) {
   var tCtx = document.getElementById("textCanvas").getContext("2d")
   encoder.addFrameImageData(tCtx.getImageData(0, 0, finalImage.cols, finalImage.rows));
 
-  encoder.getBase64GIF(function(gif_b64) {
-    document.getElementById("animateText").value = "0";
-    document.getElementById("animating").style.visibility = "hidden";
+  let downloadAnimation = document.getElementById("downloadAnimation").checked;
 
-    outputImage = document.getElementById("output");
-    outputImage.src = gif_b64;
-    encoder.destroy();
-  });
+  if (downloadAnimation) {
+    encoder.getBlobGIF(function(gif_blob) {
+      document.getElementById("animateText").value = "0";
+      document.getElementById("animating").style.visibility = "hidden";
+  
+      let text = document.getElementById("textInput").value;
+      let downloadFilename = sanitizeFilename(text, '') + ".gif";
 
+      let templink = document.createElement("a");
+      templink.download = downloadFilename;
+      templink.href= URL.createObjectURL(gif_blob);
+      templink.click();
+  
+      encoder.destroy();
+    });
+  } else {
+    encoder.getBase64GIF(function(gif_b64) {
+      document.getElementById("animateText").value = "0";
+      document.getElementById("animating").style.visibility = "hidden";
+
+      outputImage = document.getElementById("output");
+      outputImage.src = gif_b64;
+    
+      encoder.destroy();
+    });
+  }
+  
   workingImage.delete();
 }
 
@@ -452,6 +471,20 @@ function animateSingleWord(encoder, finalImage, workingImage, textRect, extraRow
 
   encoder.setDelay(0.5);
   encoder.addFrameImageData(tCtx.getImageData(0, 0, finalImage.cols, finalImage.rows));
+}
+
+function sanitizeFilename(input, replacement) {
+  var illegalRe = /[\/\?<>\\:\*\|":]/g;
+  var controlRe = /[\x00-\x1f\x80-\x9f]/g;
+  var reservedRe = /^\.+$/;
+  var windowsReservedRe = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i;
+
+  var sanitized = input
+    .replace(illegalRe, replacement)
+    .replace(controlRe, replacement)
+    .replace(reservedRe, replacement)
+    .replace(windowsReservedRe, replacement);
+  return sanitized.split("").splice(0, 255).join("");
 }
 
 function bubbleWord(textImage, color, removeText, animateText, darkMode, gapWidth, outlineThickness, blurRadius) {
