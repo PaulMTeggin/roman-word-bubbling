@@ -57,13 +57,14 @@
             Disclaimer: This is not an official Google Product.
           </p>
           <p>
-            Version 1.1.0
+            Version 1.2.0 (updated to include animation option and more colours)
           </p>
           <p>
             This application uses the following open source projects:
             <br /><a href="https://opencv.org">OpenCV</a> (<a href="third_party/OpenCV/LICENSE">License</a>)
             <br /><a href="third_party/fontdetect.js">
-              fontdetect by Lalit Patil </a>(<a href="http://www.apache.org/licenses/LICENSE-2.0">License</a>)
+              fontdetect by Lalit Patil</a> (<a href="http://www.apache.org/licenses/LICENSE-2.0">License</a>)
+            <br />For animated text, <a href="third_party/animated_gif/Animated_GIF.js">OMG GIF by Dean McNamee</a> (<a href="https://github.com/deanm/omggif/blob/master/README">Licence</a>)
           </p>
         </div>
       </div>
@@ -92,7 +93,21 @@
           <p>
             The defaults were carefully chosen to work for most students. If
             your student attunes to a different color or font, you can change
-            those in the Edit window. If anything is not working well or you
+            those in the Edit window. The first set of colours are quite bright,
+            followed by some more subtle shades. It is probably better to
+            stick to the bright colours to begin with, and investigate using
+            the more subtle shades as your student develops.            
+          </p>
+
+          <p>
+            The Animate Text button will produce an animated version of the bubbling
+            in which the words 'jump' into their respective bubbles. If you tick
+            the Download box first, it will download this as a GIF file, for offline usage.
+            If you want to download some text that is already animating,
+            click the Animate Text button again.
+          </p>
+
+          <p>If anything is not working well or you
             have suggestions, click the feedback button and let us know.
           </p>
         </div>
@@ -322,11 +337,6 @@
   <script src="third_party/mdc/material-components-web.min.js"></script>
   <script src="third_party/OpenCV/opencv.js" type="text/javascript"></script>
   <script src="third_party/fontdetect.js" type="text/javascript"></script>
-
-  <script src="third_party/jsgif/LZWEncoder.js" type="text/javascript"></script>
-  <script src="third_party/jsgif/NeuQuant.js" type="text/javascript"></script>
-  <script src="third_party/jsgif/GIFEncoder.js" type="text/javascript"></script>
-  <script src="third_party/jsgif/b64.js" type="text/javascript"></script>
 
   <script src="third_party/animated_gif/Animated_GIF.js"></script>
 
