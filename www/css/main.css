@@ -173,6 +173,7 @@ main {
 
 .colorOptions {
   display: flex;
+  flex-wrap: wrap;
 }
 
 .info,
